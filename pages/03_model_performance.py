@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 from utils.data_loader import load_all_data, check_data_available
 
 st.set_page_config(
@@ -41,18 +42,38 @@ if check_data_available(data, 'ab_comparison'):
         st.subheader("Performance Visualization")
         
         try:
-            fig = px.bar(
-                data['ab_comparison'],
-                x=data['ab_comparison'].columns[0],
-                y=data['ab_comparison'].columns[1:],
-                title="Model Performance Comparison",
-                barmode="group",
-                labels={"value": "Score", "variable": "Metric"}
-            )
-            fig.update_layout(height=500, hovermode="x unified")
-            st.plotly_chart(fig, use_container_width=True)
+            # Prepare data for visualization - select numeric columns only
+            df_viz = data['ab_comparison'].copy()
+            
+            # Convert numeric columns
+            numeric_cols = []
+            first_col = df_viz.columns[0]
+            
+            for col in df_viz.columns[1:]:
+                try:
+                    df_viz[col] = pd.to_numeric(df_viz[col], errors='coerce')
+                    numeric_cols.append(col)
+                except:
+                    pass
+            
+            # Only plot if we have numeric data
+            if numeric_cols and len(numeric_cols) > 0:
+                fig = px.bar(
+                    df_viz[[first_col] + numeric_cols],
+                    x=first_col,
+                    y=numeric_cols,
+                    title="Model Performance Comparison",
+                    barmode="group",
+                    labels={"value": "Score", "variable": "Metric"}
+                )
+                fig.update_layout(height=500, hovermode="x unified")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No numeric data available for visualization. Check the data format.")
+                
         except Exception as e:
-            st.warning(f"Could not create visualization: {e}")
+            st.warning(f"Could not create visualization: {str(e)}")
+            st.info("Displaying data as table instead.")
     
     # Model insights
     st.divider()
