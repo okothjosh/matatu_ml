@@ -1,5 +1,5 @@
 # app.py - Nairobi Matatu Demand Forecasting & Dynamic Pricing Dashboard
-# Streamlit Dashboard for XGBoost/LSTM Ensemble Model
+# WITHOUT streamlit-folium dependency - uses native Streamlit components
 
 import streamlit as st
 import pandas as pd
@@ -8,10 +8,6 @@ import pickle
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import folium
-from streamlit_folium import folium_static
-from PIL import Image
-import json
 
 # Page configuration
 st.set_page_config(
@@ -44,14 +40,6 @@ st.markdown("""
         border-radius: 8px;
         margin: 1rem 0;
     }
-    .stButton button {
-        background-color: #0B2B4F;
-        color: white;
-        border-radius: 20px;
-    }
-    .stButton button:hover {
-        background-color: #1A4A7A;
-    }
     .pricing-card {
         background: linear-gradient(135deg, #0B2B4F 0%, #1A4A7A 100%);
         color: white;
@@ -69,34 +57,25 @@ st.markdown("""
 def load_artifacts():
     """Load all model artifacts"""
     try:
-        # Load champion model
         with open('model_champion.pkl', 'rb') as f:
             model = pickle.load(f)
-        
-        # Load scaler
         with open('minmax_scaler.pkl', 'rb') as f:
             scaler = pickle.load(f)
-        
-        # Load encoder
         with open('route_id_onehot_encoder.pkl', 'rb') as f:
             encoder = pickle.load(f)
-        
         return model, scaler, encoder
-    except FileNotFoundError as e:
-        st.warning(f"⚠️ Artifact not found: {e}. Using demo mode with synthetic predictions.")
+    except FileNotFoundError:
+        st.warning("⚠️ Artifact files not found. Using demo mode with synthetic predictions.")
         return None, None, None
 
 # ============================================================================
-# Generate Synthetic Route Data (Fallback when real data unavailable)
+# Generate Route Data
 # ============================================================================
 @st.cache_data
 def load_route_data():
-    """Generate route and stop data based on Digital Matatus GTFS structure"""
-    
-    # 135 routes with their stop counts
+    """Generate 135 routes with stop information"""
     np.random.seed(42)
     
-    # Route names (sample of 135)
     route_prefixes = ['Railways', 'Langata', 'Rongai', 'Kasarani', 'CBD', 'Westlands', 
                       'Kilimani', 'Buruburu', 'Eastleigh', 'Karen', 'Ngong', 'Thika Road',
                       'Juja Road', 'Mombasa Road', 'Waiyaki Way']
@@ -104,8 +83,6 @@ def load_route_data():
     route_suffixes = ['Express', 'Local', 'Direct', 'Circular', 'Limited']
     
     routes = []
-    stop_coords = {}
-    
     for i in range(1, 136):
         prefix = np.random.choice(route_prefixes)
         suffix = np.random.choice(route_suffixes)
@@ -120,8 +97,8 @@ def load_route_data():
     
     routes_df = pd.DataFrame(routes)
     
-    # Generate stop coordinates for each route (Nairobi bounding box)
-    # Nairobi coordinates: lat ~ -1.2864, lon ~ 36.8172
+    # Generate stop coordinates for each route
+    stops_data = {}
     for route_id in routes_df['route_id']:
         route_stops = []
         num_stops = routes_df[routes_df['route_id'] == route_id]['num_stops'].values[0]
@@ -135,26 +112,19 @@ def load_route_data():
                 'lon': lon,
                 'order': s
             })
-        stop_coords[route_id] = route_stops
+        stops_data[route_id] = route_stops
     
-    return routes_df, stop_coords
+    return routes_df, stops_data
 
 # ============================================================================
 # Demand Prediction Function
 # ============================================================================
 def predict_demand(route_id, hour, rainfall, temperature, poi_density, model, scaler, encoder):
-    """
-    Predict demand quantile based on input features
-    Returns: demand_quantile (Low/Medium/High), occupancy_score
-    """
+    """Predict demand quantile based on input features"""
     
-    # Feature engineering based on proposal insights
-    # Top features: Hour of Day (0.45) and POI Density (0.28)
-    
-    # Base demand formula (synthetic but scientifically grounded)
     base_demand = 1000
     
-    # Hour factor (peak hours 7-9 AM: 1.5x, 5-7 PM: 1.4x, night: 0.5x)
+    # Hour factor (peak hours: 7-9 AM, 5-7 PM)
     if 7 <= hour <= 9:
         hour_factor = 1.5
     elif 17 <= hour <= 19:
@@ -165,7 +135,6 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, model, sc
         hour_factor = 1.0
     
     # Weather impacts
-    # Rainfall reduces demand by up to 20%
     rain_penalty = max(0, 1 - (rainfall / 20) * 0.3)
     
     # Temperature: optimal at 22-26°C
@@ -174,7 +143,7 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, model, sc
     else:
         temp_factor = 1 - abs(temperature - 24) / 50
     
-    # POI Density (major driver)
+    # POI Density
     poi_factor = 0.5 + (poi_density / 100) * 1.5
     poi_factor = min(1.8, poi_factor)
     
@@ -203,13 +172,9 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, model, sc
 # ============================================================================
 # Surge Pricing Logic (Scenario C: 1.8x cap)
 # ============================================================================
-def calculate_surge_multiplier(demand_score, hour, base_fare=50):
-    """
-    Calculate dynamic surge multiplier based on demand
-    Scenario C: Max 1.8x cap → 10.35% revenue uplift
-    """
+def calculate_surge_multiplier(demand_score, hour):
+    """Calculate dynamic surge multiplier based on demand"""
     
-    # Base multiplier from demand
     if demand_score < 1000:
         multiplier = 1.0
     elif demand_score < 1800:
@@ -226,10 +191,7 @@ def calculate_surge_multiplier(demand_score, hour, base_fare=50):
     # Cap at 1.8x (Scenario C)
     multiplier = min(1.8, multiplier)
     
-    # Round to 2 decimals
-    multiplier = round(multiplier, 2)
-    
-    return multiplier
+    return round(multiplier, 2)
 
 # ============================================================================
 # Revenue Calculation
@@ -239,12 +201,8 @@ def calculate_revenue(demand_score, multiplier, route_popularity):
     base_fare = 50
     estimated_riders = int(demand_score * route_popularity)
     
-    # Baseline: fixed fare
     baseline_revenue = estimated_riders * base_fare
-    
-    # Dynamic pricing: surged fare
     surged_revenue = estimated_riders * base_fare * multiplier
-    
     uplift = ((surged_revenue - baseline_revenue) / baseline_revenue) * 100
     
     return baseline_revenue, surged_revenue, uplift
@@ -255,15 +213,10 @@ def calculate_revenue(demand_score, multiplier, route_popularity):
 def create_top_routes_chart(routes_df):
     """Create Plotly bar chart for top 5 routes revenue uplift"""
     
-    # Simulate uplift percentages for top routes
     top_routes = routes_df.nlargest(10, 'popularity_score').copy()
     
-    # Assign realistic uplift values (centered around champion route)
     np.random.seed(42)
     top_routes['uplift_pct'] = np.random.uniform(8, 22, len(top_routes))
-    
-    # Set Route 50205012511 as top performer (22.35%)
-    # Find route index and set to 22.35
     top_routes.iloc[0, top_routes.columns.get_loc('uplift_pct')] = 22.35
     
     fig = px.bar(
@@ -291,13 +244,12 @@ def create_top_routes_chart(routes_df):
     return fig
 
 # ============================================================================
-# Create Route Map (Folium)
+# Create Route Map using Plotly (no folium dependency)
 # ============================================================================
-def create_route_map(route_id, stops_data):
-    """Create Folium map showing stops for selected route"""
+def create_route_map_plotly(route_id, stops_data):
+    """Create an interactive map using Plotly (no folium needed)"""
     
     if route_id not in stops_data:
-        # Fallback: create sample stops
         stops = []
         for i in range(10):
             stops.append({
@@ -309,38 +261,39 @@ def create_route_map(route_id, stops_data):
     else:
         stops = stops_data[route_id]
     
-    # Center map on first stop
-    center_lat = stops[0]['lat']
-    center_lon = stops[0]['lon']
+    # Create dataframe for stops
+    stops_df = pd.DataFrame(stops)
     
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, control_scale=True)
+    # Create the map using scatter_mapbox
+    fig = px.scatter_mapbox(
+        stops_df,
+        lat='lat',
+        lon='lon',
+        text='stop_name',
+        hover_name='stop_name',
+        color_discrete_sequence=['#0B2B4F'],
+        zoom=12,
+        height=400,
+        title=f"Route Stops Map"
+    )
     
-    # Add stops with markers
-    for i, stop in enumerate(stops):
-        # Color gradient from start (green) to end (red)
-        color = '#0B2B4F' if i == 0 else '#4A5B6E' if i == len(stops)-1 else '#2E86AB'
-        
-        folium.CircleMarker(
-            location=[stop['lat'], stop['lon']],
-            radius=6,
-            popup=f"<b>{stop['stop_name']}</b><br>Stop #{i+1}",
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.7
-        ).add_to(m)
-        
-        # Add line between consecutive stops
-        if i < len(stops) - 1:
-            folium.PolyLine(
-                locations=[[stops[i]['lat'], stops[i]['lon']], 
-                          [stops[i+1]['lat'], stops[i+1]['lon']]],
-                color='#0B2B4F',
-                weight=3,
-                opacity=0.5
-            ).add_to(m)
+    # Add lines between stops
+    for i in range(len(stops_df) - 1):
+        fig.add_trace(go.Scattermapbox(
+            lat=[stops_df.iloc[i]['lat'], stops_df.iloc[i+1]['lat']],
+            lon=[stops_df.iloc[i]['lon'], stops_df.iloc[i+1]['lon']],
+            mode='lines',
+            line=dict(width=3, color='#4A5B6E'),
+            showlegend=False,
+            hoverinfo='none'
+        ))
     
-    return m
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin=dict(l=0, r=0, t=30, b=0)
+    )
+    
+    return fig
 
 # ============================================================================
 # Main Dashboard
@@ -366,7 +319,7 @@ def main():
         st.markdown("## 📊 Input Parameters")
         st.markdown("---")
         
-        # Route selection (135 routes)
+        # Route selection
         route_options = {row['route_id']: f"{row['route_id']}: {row['route_name']}" 
                          for _, row in routes_df.iterrows()}
         selected_route_id = st.selectbox(
@@ -376,54 +329,24 @@ def main():
             help="Choose from 135 matatu routes in Nairobi"
         )
         
-        # Get selected route info
         selected_route = routes_df[routes_df['route_id'] == selected_route_id].iloc[0]
         
         st.markdown("---")
         st.markdown("### 🌡️ Environmental Proxies")
         
-        # Hour of Day (0-23)
-        hour = st.slider(
-            "⏰ Hour of Day",
-            min_value=0, max_value=23, value=14,
-            help="Peak hours (7-9 AM, 5-7 PM) show highest demand"
-        )
-        
-        # Rainfall
-        rainfall = st.slider(
-            "🌧️ Rainfall (mm)",
-            min_value=0.0, max_value=30.0, value=0.0, step=0.5,
-            help="Heavy rainfall reduces demand by up to 30%"
-        )
-        
-        # Temperature
-        temperature = st.slider(
-            "🌡️ Temperature (°C)",
-            min_value=15.0, max_value=32.0, value=24.0, step=0.5,
-            help="Optimal temperature range: 22-26°C"
-        )
-        
-        # POI Density
-        poi_density = st.slider(
-            "🏢 POI Density (0-100)",
-            min_value=0.0, max_value=100.0, value=45.0, step=5.0,
-            help="Higher POI density = higher demand potential"
-        )
+        hour = st.slider("⏰ Hour of Day", 0, 23, 14)
+        rainfall = st.slider("🌧️ Rainfall (mm)", 0.0, 30.0, 0.0, 0.5)
+        temperature = st.slider("🌡️ Temperature (°C)", 15.0, 32.0, 24.0, 0.5)
+        poi_density = st.slider("🏢 POI Density (0-100)", 0.0, 100.0, 45.0, 5.0)
         
         st.markdown("---")
         st.info("**Scenario C Active** | Max Surge Cap: 1.8x\n*10.35% projected revenue uplift*")
         
-        # Predict button
         predict_button = st.button("🔮 Generate Forecast", use_container_width=True)
     
     # ===== MAIN PANEL =====
     
-    # Default prediction on load
-    if 'last_prediction' not in st.session_state:
-        predict_button = True
-    
-    if predict_button:
-        # Get predictions
+    if predict_button or 'demand_quantile' not in st.session_state:
         demand_quantile, demand_score, occupancy_pct = predict_demand(
             selected_route_id, hour, rainfall, temperature, poi_density, 
             model, scaler, encoder
@@ -434,7 +357,6 @@ def main():
             demand_score, surge_multiplier, selected_route['popularity_score']
         )
         
-        # Store in session state
         st.session_state.demand_quantile = demand_quantile
         st.session_state.demand_score = demand_score
         st.session_state.occupancy_pct = occupancy_pct
@@ -443,38 +365,23 @@ def main():
         st.session_state.surged_rev = surged_rev
         st.session_state.uplift = uplift
     
-    # Display results if available
     if 'demand_quantile' in st.session_state:
         
-        # Top row: Demand Forecast Metrics
         st.markdown("## 📈 Demand Forecast")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Color coding for quantile
             quantile_color = "🔴" if st.session_state.demand_quantile == "High" else "🟡" if st.session_state.demand_quantile == "Medium" else "🟢"
-            st.metric(
-                label="Predicted Demand Quantile",
-                value=f"{quantile_color} {st.session_state.demand_quantile}",
-                delta="Based on XGBoost/LSTM Ensemble"
-            )
+            st.metric("Predicted Demand Quantile", f"{quantile_color} {st.session_state.demand_quantile}")
         
         with col2:
-            st.metric(
-                label="Predicted Demand Score",
-                value=f"{int(st.session_state.demand_score):,} riders",
-                delta=f"Hour: {hour}:00"
-            )
+            st.metric("Predicted Demand Score", f"{int(st.session_state.demand_score):,} riders")
         
         with col3:
-            st.metric(
-                label="Predicted Occupancy Proxy",
-                value=f"{st.session_state.occupancy_pct:.1f}%",
-                delta="of vehicle capacity"
-            )
+            st.metric("Predicted Occupancy Proxy", f"{st.session_state.occupancy_pct:.1f}%")
         
-        # Pricing Recommendation Section
+        # Pricing Section
         st.markdown("## 💰 Pricing Recommendation (Scenario C)")
         
         col1, col2, col3 = st.columns(3)
@@ -505,7 +412,7 @@ def main():
             </div>
             """, unsafe_allow_html=True)
         
-        # Model Explainability Section
+        # Model Explainability
         with st.expander("🔍 Model Explainability & Feature Importance", expanded=False):
             st.markdown("""
             <div class="insight-box">
@@ -515,60 +422,35 @@ def main():
                     <li><strong>🏢 POI Density (28% importance)</strong> - Commercial areas generate consistent demand</li>
                     <li><strong>🌧️ Rainfall (12% importance)</strong> - Adverse weather reduces ridership</li>
                 </ul>
-                <p><strong>Champion Model:</strong> XGBoost + LSTM Ensemble | <strong>Training Data:</strong> Digital Matatus GTFS (135 routes, 4,500+ stops)</p>
-                <p><small>Feature importance derived from SHAP values on holdout test set</small></p>
+                <p><strong>Champion Model:</strong> XGBoost + LSTM Ensemble</p>
             </div>
             """, unsafe_allow_html=True)
         
-        # Two-column layout for map and chart
+        # Maps and Charts
         st.markdown("## 🗺️ Route Visualization & Performance Context")
         
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("### 📍 Route Stops Map")
-            route_map = create_route_map(selected_route_id, stops_data)
-            folium_static(route_map, width=400, height=350)
-            st.caption(f"Showing stops for Route {selected_route_id}: {selected_route['route_name']} | {selected_route['num_stops']} stops")
+            route_map = create_route_map_plotly(selected_route_id, stops_data)
+            st.plotly_chart(route_map, use_container_width=True)
+            st.caption(f"Route {selected_route_id}: {selected_route['route_name']} | {selected_route['num_stops']} stops")
         
         with col2:
             st.markdown("### 📊 Top Routes Revenue Uplift")
             fig = create_top_routes_chart(routes_df)
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Route 50205012511 (Railways-Langata Road-Ongata Rongai): 22.35% uplift - Highest performing corridor")
-        
-        # Additional Insights
-        st.markdown("---")
-        st.markdown("### 💡 Operational Insights")
-        
-        insight_col1, insight_col2, insight_col3 = st.columns(3)
-        
-        with insight_col1:
-            st.info(f"**Peak Hour Status**\n\n{'🔴 PEAK HOUR' if (7 <= hour <= 9 or 17 <= hour <= 19) else '🟢 OFF-PEAK'}\nSuggested surge: {st.session_state.surge_multiplier}x")
-        
-        with insight_col2:
-            st.success(f"**Weather Impact**\n\nRainfall {rainfall}mm → {'High impact' if rainfall > 10 else 'Low impact'} on demand")
-        
-        with insight_col3:
-            if poi_density > 70:
-                st.warning(f"**High POI Density**\n\n{poi_density:.0f}/100 suggests premium pricing opportunity")
-            else:
-                st.info(f"**POI Density**\n\n{poi_density:.0f}/100 - Standard demand zone")
+            st.caption("Route 50205012511: 22.35% uplift - Highest performing corridor")
         
         # Footer
         st.markdown("---")
         st.markdown("""
         <div style="text-align: center; color: #666; padding: 1rem;">
             <p>© 2025 Okoth Joshua Jovern | JKUAT Data Science Project</p>
-            <p><small>Digital Matatus GTFS • Open-Meteo Weather • OSM POI • Champion Model: XGBoost/LSTM Ensemble (0.79 MB)</small></p>
+            <p><small>Digital Matatus GTFS • Champion Model: XGBoost/LSTM Ensemble (0.79 MB)</small></p>
         </div>
         """, unsafe_allow_html=True)
-    
-    else:
-        st.info("👈 Use the sidebar to select a route and input parameters, then click 'Generate Forecast'")
 
-# ============================================================================
-# Run the app
-# ============================================================================
 if __name__ == "__main__":
     main()
