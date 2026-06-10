@@ -1,0 +1,5 @@
+Scenario,Total Simulated Revenue,Mean Predicted Demand (Occupancy),Revenue Uplift (%),Peak Occupancy Below Threshold
+Baseline (Flat Fare),14457742.32530322,96.38494883535479,0.0,True
+Scenario A (1.2x Cap),15583604.445229959,96.38494883535479,7.787260933239291,True
+Scenario B (1.5x Cap),15950174.592922062,96.38494883535479,10.322720062639808,True
+Scenario C (1.8x Cap),15954900.164360253,96.38494883535479,10.355405466293192,True

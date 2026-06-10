@@ -1,0 +1,11 @@
+
+--- Artifact File Size Report ---
+Champion Model (model_champion.pkl): 0.79 MB
+MinMax Scaler (minmax_scaler.pkl): 0.00 MB
+Route ID OneHot Encoder (route_id_onehot_encoder.pkl): 0.00 MB
+Surge Recommendations (surge_recommendations.csv): 0.06 MB
+Route Surge Summary (route_surge_summary.csv): 0.01 MB
+A/B Comparison Results (ab_comparison.csv): 0.00 MB
+Elasticity Impact Results (elasticity_impact.csv): 0.00 MB
+-----------------------------------
+✅ Champion Model size (0.79 MB) is below Streamlit Cloud 100 MB memory limit.
