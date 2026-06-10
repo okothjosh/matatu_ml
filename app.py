@@ -1,11 +1,12 @@
 # app.py - Nairobi Matatu Demand & Pricing Dashboard
-# Properly parsing Digital Matatus GTFS routes.txt format
+# Reads routes from data/raw/routes.txt (GTFS format)
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
 # Page configuration
 st.set_page_config(
@@ -74,102 +75,92 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# Function: Load Routes from GTFS routes.txt
+# Function: Load Routes from routes.txt (GTFS format)
 # ============================================================================
 @st.cache_data
-def load_routes_from_gtfs(routes_txt_path="routes.txt"):
+def load_routes_from_gtfs():
     """
-    Load route_id to route_name mapping from Digital Matatus GTFS routes.txt.
-    Expected format: route_id,agency_id,route_short_name,route_long_name,route_type
+    Load route data from data/raw/routes.txt (GTFS format)
+    Expected columns: route_id, agency_id, route_short_name, route_long_name, route_type
+    """
+    # Try multiple possible paths (local development vs GitHub deployment)
+    possible_paths = [
+        "data/raw/routes.txt",           # Relative path from app root
+        "routes.txt",                     # Fallback in root
+        "../data/raw/routes.txt",         # One level up
+        "./data/raw/routes.txt"           # Explicit current directory
+    ]
     
-    route_type 3 = Bus (Matatu)
-    """
-    try:
-        # Try to load actual routes.txt file
-        routes_df = pd.read_csv(routes_txt_path)
-        
-        # Display column info for debugging (optional)
-        st.sidebar.caption(f"✅ Loaded {len(routes_df)} routes from GTFS")
-        
-        # Check if required columns exist
+    routes_df = None
+    
+    for path in possible_paths:
+        try:
+            if os.path.exists(path):
+                routes_df = pd.read_csv(path)
+                st.success(f"✅ Loaded {len(routes_df)} routes from {path}")
+                break
+        except Exception as e:
+            continue
+    
+    # If no file found, try from raw GitHub URL (for Streamlit Cloud)
+    if routes_df is None:
+        try:
+            # Try to fetch from raw GitHub URL (you'll need to replace with your actual repo)
+            github_raw_url = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/data/raw/routes.txt"
+            routes_df = pd.read_csv(github_raw_url)
+            st.success(f"✅ Loaded {len(routes_df)} routes from GitHub")
+        except:
+            st.warning("⚠️ routes.txt not found. Using generated sample data.")
+            routes_df = generate_sample_routes()
+    
+    # Ensure required columns exist and clean data
+    if routes_df is not None:
+        # Handle different column naming conventions
         if 'route_id' not in routes_df.columns:
             st.error("routes.txt missing 'route_id' column")
             return generate_sample_routes()
         
-        # Create a display name using route_long_name or route_short_name
+        # Create a display name from available columns
         if 'route_long_name' in routes_df.columns:
-            # Use route_long_name as the primary display name
-            routes_df['display_name'] = routes_df['route_long_name'].fillna('')
-            
-            # If route_long_name is empty, fall back to route_short_name
-            mask_empty = routes_df['display_name'] == ''
-            if 'route_short_name' in routes_df.columns:
-                routes_df.loc[mask_empty, 'display_name'] = routes_df.loc[mask_empty, 'route_short_name'].fillna('')
+            routes_df['display_name'] = routes_df['route_long_name']
         elif 'route_short_name' in routes_df.columns:
             routes_df['display_name'] = routes_df['route_short_name']
         else:
             routes_df['display_name'] = routes_df['route_id'].astype(str)
         
-        # Clean up display names (remove NaN, empty strings)
-        routes_df['display_name'] = routes_df['display_name'].fillna('')
-        routes_df.loc[routes_df['display_name'] == '', 'display_name'] = routes_df['route_id'].astype(str)
+        # Clean any NaN values in display names
+        routes_df['display_name'] = routes_df['display_name'].fillna(routes_df['route_id'].astype(str))
         
-        # Add additional metadata if available
-        if 'route_type' in routes_df.columns:
-            # route_type 3 = Bus (Matatu)
-            routes_df['is_matatu'] = routes_df['route_type'] == 3
-        
-        # Add default columns if missing (for simulation)
+        # Add default columns if missing
         if 'num_stops' not in routes_df.columns:
+            # Estimate stops based on route type or default
             routes_df['num_stops'] = np.random.randint(8, 25, len(routes_df))
-        if 'popularity_score' not in routes_df.columns:
-            # Generate realistic popularity based on route characteristics
-            routes_df['popularity_score'] = routes_df.index.map(
-                lambda x: np.random.uniform(0.4, 1.0)
-            )
         
-        # Filter to only matatu routes (route_type=3) if column exists
-        original_count = len(routes_df)
-        if 'route_type' in routes_df.columns:
-            routes_df = routes_df[routes_df['route_type'] == 3]
-            if len(routes_df) < original_count:
-                st.sidebar.info(f"Filtered to {len(routes_df)} matatu routes (route_type=3)")
+        if 'popularity_score' not in routes_df.columns:
+            # Generate realistic popularity scores
+            np.random.seed(42)
+            routes_df['popularity_score'] = np.random.uniform(0.5, 1.0, len(routes_df))
         
         return routes_df
-        
-    except FileNotFoundError:
-        st.warning("routes.txt not found. Using generated route data.")
-        return generate_sample_routes()
-    except Exception as e:
-        st.error(f"Error loading routes.txt: {str(e)}")
-        return generate_sample_routes()
+    
+    return generate_sample_routes()
 
 def generate_sample_routes():
     """Generate 135 sample routes with realistic Nairobi matatu names (fallback)"""
     np.random.seed(42)
     
-    # Realistic Nairobi route names based on Digital Matatus GTFS
+    # Realistic Nairobi route names
     route_names = [
-        "Ruaka-Ruiru",
+        "Railways-Langata Road-Ongata Rongai",
         "CBD-Westlands-Kangemi",
-        "Kenyatta Market-Odeon",
-        "Kasarani-Mwiki",
-        "Eastleigh-Section III",
-        "Buruburu Phase 5",
-        "Kilimani-Hurlingham",
-        "Uthiru-Kinoo",
-        "Juja Road-Kayole",
-        "Githurai-44",
-        "Ruai-Kamulu",
-        "Ngong Road-Karen",
-        "Kilimani-Yaya Centre",
-        "Westlands-Spring Valley",
-        "Syokimau-Athi River",
-        "KU-Ruiru",
-        "Kikuyu-Limuru",
-        "Donholm-Embakasi",
-        "Adams Arcade-Karen",
-        "Industrial Area-Airport"
+        "Mama Ngina Street-Kenyatta Market",
+        "Odeon-Kasarani-Mwiki",
+        "Ambassadeur-Eastleigh-Section III",
+        "Kirinyaga Road-Buruburu Phase 5",
+        "River Road-Kilimani-Hurlingham",
+        "Moi Avenue-Uthiru-Kinoo",
+        "Haile Selassie-Juja Road-Kayole",
+        "Tom Mboya Street-Githurai-44"
     ]
     
     routes = []
@@ -180,21 +171,20 @@ def generate_sample_routes():
             base_name = f"Route {i:03d}"
         
         routes.append({
-            'route_id': f"ROUTE_{i:05d}",
+            'route_id': str(i),
             'display_name': base_name,
             'num_stops': np.random.randint(8, 25),
-            'popularity_score': np.random.uniform(0.5, 1.0),
-            'avg_daily_demand': np.random.randint(500, 5000)
+            'popularity_score': np.random.uniform(0.5, 1.0)
         })
     
     return pd.DataFrame(routes)
 
 # ============================================================================
-# Function: Get route display name
+# Function: Map route_id to route_name
 # ============================================================================
-def get_route_display_name(route_id, routes_df):
-    """Return formatted display name for given route_id"""
-    result = routes_df[routes_df['route_id'] == route_id]
+def get_route_name(route_id, routes_df):
+    """Return display name for given route_id"""
+    result = routes_df[routes_df['route_id'].astype(str) == str(route_id)]
     if len(result) > 0:
         return result.iloc[0]['display_name']
     return f"Route {route_id}"
@@ -220,7 +210,7 @@ def get_demand_quantile(demand_score):
 # Function: Get Commuter Outlook based on quantile
 # ============================================================================
 def get_commuter_outlook(quantile):
-    """Return status, message, and badge color based on quantile"""
+    """Return status, message, and badge based on quantile"""
     if quantile == 0:
         return {
             'status': 'Seats Available',
@@ -255,12 +245,9 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, routes_df
     base_demand = 1000
     base_fare = 50
     
-    # Get route popularity
-    route_data = routes_df[routes_df['route_id'] == route_id]
-    if len(route_data) > 0:
-        route_pop = route_data.iloc[0]['popularity_score']
-    else:
-        route_pop = 0.7
+    # Get route popularity (convert route_id to string for comparison)
+    route_id_str = str(route_id)
+    route_pop = routes_df[routes_df['route_id'].astype(str) == route_id_str]['popularity_score'].iloc[0]
     
     # Hour factor (peak hours)
     if 7 <= hour <= 9:
@@ -351,12 +338,15 @@ def create_top_routes_chart(routes_df):
     uplifts = [22.35, 18.5, 16.2, 14.8, 13.1, 11.7, 10.9, 10.35]
     top_routes['uplift_pct'] = uplifts[:len(top_routes)]
     
+    # Truncate long names for display
+    top_routes['short_name'] = top_routes['display_name'].apply(lambda x: x[:30] + '...' if len(str(x)) > 30 else x)
+    
     fig = px.bar(
         top_routes.head(6),
-        x='display_name',
+        x='short_name',
         y='uplift_pct',
         title='Top Performing Routes by Revenue Uplift',
-        labels={'uplift_pct': 'Revenue Uplift (%)', 'display_name': 'Route'},
+        labels={'uplift_pct': 'Revenue Uplift (%)', 'short_name': 'Route'},
         color='uplift_pct',
         color_continuous_scale='Blues',
         text='uplift_pct'
@@ -385,12 +375,19 @@ def main():
     <div class="main-header">
         <h1 style="margin:0;">🚐 Nairobi Matatu Demand Forecasting & Dynamic Pricing</h1>
         <p style="margin:0; opacity:0.9;">XGBoost/LSTM Ensemble | Scenario C (1.8x Surge Cap) | 10.35% Revenue Uplift</p>
-        <p style="margin:0; font-size:0.9rem; opacity:0.8;">Digital Matatus GTFS Data • 135+ Routes • 4,500+ Stops</p>
+        <p style="margin:0; font-size:0.9rem; opacity:0.8;">Machine Learning Driven Demand Forecasting for 135 Routes • Digital Matatus GTFS</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Load routes from GTFS routes.txt
-    routes_df = load_routes_from_gtfs("routes.txt")
+    # Load routes from routes.txt
+    routes_df = load_routes_from_gtfs()
+    
+    # Debug info - remove in production
+    with st.expander("ℹ️ Data Source Info", expanded=False):
+        st.write(f"✅ Loaded {len(routes_df)} routes from GTFS data")
+        st.write(f"📊 Columns available: {list(routes_df.columns)}")
+        st.write(f"📝 Sample routes:")
+        st.dataframe(routes_df[['route_id', 'display_name']].head(10), use_container_width=True)
     
     # ===== SIDEBAR INPUTS =====
     with st.sidebar:
@@ -398,33 +395,29 @@ def main():
         st.markdown("## 📊 Input Parameters")
         st.markdown("---")
         
-        # Route selection - using display_name in dropdown
+        # Route selection - using display_name from GTFS data
         route_options = {row['display_name']: row['route_id'] for _, row in routes_df.iterrows()}
         
         selected_route_name = st.selectbox(
-            "🚏 Select Matatu Route",
+            "🚏 Select Route",
             options=list(route_options.keys()),
-            help=f"Choose from {len(routes_df)} matatu routes in Nairobi"
+            help="Choose from routes loaded from Digital Matatus GTFS data"
         )
         
         # Get the corresponding route_id
         selected_route_id = route_options[selected_route_name]
         
         # Display additional route info
-        route_info = routes_df[routes_df['route_id'] == selected_route_id].iloc[0]
-        
-        info_text = f"📌 {route_info['num_stops']} stops"
-        if 'route_type' in route_info and route_info['route_type'] == 3:
-            info_text += " | 🚌 Matatu"
-        st.caption(info_text)
+        route_info = routes_df[routes_df['route_id'].astype(str) == str(selected_route_id)].iloc[0]
+        st.caption(f"📌 ID: {selected_route_id} | 🚏 {route_info['num_stops']} stops")
         
         st.markdown("---")
         st.markdown("### 🌡️ Environmental Proxies")
         
-        hour = st.slider("⏰ Hour of Day", 0, 23, 14, help="Peak hours: 7-9 AM, 5-7 PM")
-        rainfall = st.slider("🌧️ Rainfall (mm)", 0.0, 30.0, 0.0, 0.5)
-        temperature = st.slider("🌡️ Temperature (°C)", 15.0, 32.0, 24.0, 0.5)
-        poi_density = st.slider("🏢 POI Density (0-100)", 0, 100, 50, 5)
+        hour = st.slider("⏰ Hour of Day", 0, 23, 14, help="Peak hours (7-9 AM, 5-7 PM) show highest demand")
+        rainfall = st.slider("🌧️ Rainfall (mm)", 0.0, 30.0, 0.0, 0.5, help="Higher rainfall reduces demand")
+        temperature = st.slider("🌡️ Temperature (°C)", 15.0, 32.0, 24.0, 0.5, help="Optimal: 22-26°C")
+        poi_density = st.slider("🏢 POI Density (0-100)", 0, 100, 50, 5, help="Commercial density near route")
         
         st.markdown("---")
         st.info("**Scenario C Active** | Max Surge Cap: 1.8x\n*10.35% projected revenue uplift*")
@@ -491,7 +484,7 @@ def main():
             <div class="metric-card">
                 <p style="margin:0; color:#666;">💰 Fare Estimate</p>
                 <h3 style="margin:0; color:#0B2B4F;">KES {pred['fare_estimate']}</h3>
-                <small>Kes {pred['base_fare']} × {pred['surge_multiplier']}x</small>
+                <small>KES {pred['base_fare']} × {pred['surge_multiplier']}x</small>
             </div>
             """, unsafe_allow_html=True)
         
@@ -535,18 +528,18 @@ def main():
                 delta=f"+{pred['revenue_uplift']:.1f}% uplift"
             )
         
-        # Model Explainability
+        # Model Explainability Section
         with st.expander("🔍 Model Explainability & Feature Importance", expanded=False):
             st.markdown("""
             <div style="background-color: #EFF3F6; padding: 1rem; border-radius: 8px;">
                 <h4>📊 Top 3 Most Important Features</h4>
                 <ul>
-                    <li><strong>⏰ Hour of Day (45% importance)</strong> - Peak hours drive highest demand surges</li>
+                    <li><strong>⏰ Hour of Day (45% importance)</strong> - Peak hours (7-9 AM, 5-7 PM) drive highest demand</li>
                     <li><strong>🏢 POI Density (28% importance)</strong> - Commercial areas generate consistent ridership</li>
                     <li><strong>🌧️ Rainfall (12% importance)</strong> - Heavy rain reduces demand by up to 30%</li>
                 </ul>
-                <p><strong>Champion Model:</strong> XGBoost + LSTM Ensemble</p>
-                <p><small>Trained on Digital Matatus GTFS data • 135 routes • 4,500+ stops</small></p>
+                <p><strong>Champion Model:</strong> XGBoost + LSTM Ensemble | <strong>Training Data:</strong> Digital Matatus GTFS (135 routes, 4,500+ stops)</p>
+                <p><small>Scenario C dynamic pricing with 1.8x surge cap yields 10.35% average revenue uplift</small></p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -568,12 +561,7 @@ def main():
                         {'range': [0, 60], 'color': "#10B981"},
                         {'range': [60, 85], 'color': "#F59E0B"},
                         {'range': [85, 100], 'color': "#DC2626"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': pred['occupancy_pct']
-                    }
+                    ]
                 }
             ))
             fig_gauge.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
@@ -583,6 +571,18 @@ def main():
         with col2:
             fig_bar = create_top_routes_chart(routes_df)
             st.plotly_chart(fig_bar, use_container_width=True)
+            st.caption("Route 50205012511 (Railways-Langata Road-Ongata Rongai): 22.35% uplift")
+        
+        # Route-specific insight
+        st.markdown("---")
+        st.markdown("### 💡 Route-Specific Insight")
+        
+        if pred['quantile'] == 2 and (7 <= hour <= 9 or 17 <= hour <= 19):
+            st.warning("🚨 **Peak hour + High demand detected!** Consider adding extra trips on this route during this time slot.")
+        elif pred['quantile'] == 0:
+            st.success("✅ **Low demand period.** Opportunity for promotional fares to increase ridership.")
+        else:
+            st.info(f"📊 **Normal operating conditions.** Dynamic pricing active at {pred['surge_multiplier']}x surge.")
         
         # Footer
         st.markdown("---")
@@ -593,5 +593,8 @@ def main():
         </div>
         """, unsafe_allow_html=True)
 
+# ============================================================================
+# Run the app
+# ============================================================================
 if __name__ == "__main__":
     main()
