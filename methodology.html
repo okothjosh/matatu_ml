@@ -1,0 +1,59 @@
+<!-- ****************************************************** -->
+<!-- ************* PAGE 2: methodology.html ************** -->
+<!-- ****************************************************** -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Methodology | CRISP-DM & Models</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>body { font-family: 'Inter', sans-serif; background:#F8FAFE; } .bg-deep-blue{background:#0B2B4F;} .navbar{background:white!important;} .nav-link,.navbar-brand{color:#0B2B4F!important;font-weight:600;} .timeline-phase{border-left:3px solid #0B2B4F; padding-left:1.2rem; margin-bottom:1.8rem;} .table-custom th{background:#0B2B4F; color:white;} footer{background:#0B2B4F; color:#CFDFF0;} .section-title:after{content:'';position:absolute;bottom:-12px;left:0;width:60px;height:3px;background:#0B2B4F;} .section-title{position:relative;display:inline-block;margin-bottom:2rem;}</style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg sticky-top bg-white py-3"><div class="container"><a class="navbar-brand fw-bold" href="index.html"><i class="bi bi-graph-up me-2"></i>Matatu AI Labs</a><button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbarMain"><span class="navbar-toggler-icon"></span></button><div class="collapse navbar-collapse" id="navbarMain"><ul class="navbar-nav ms-auto gap-2"><li class="nav-item"><a class="nav-link" href="index.html">Home</a></li><li class="nav-item"><a class="nav-link" href="methodology.html">Methodology</a></li><li class="nav-item"><a class="nav-link" href="results.html">Results</a></li><li class="nav-item"><a class="nav-link" href="artifacts.html">Technical Artifacts</a></li></ul></div></div></nav>
+
+<main class="container py-5">
+  <h1 class="fw-bold text-deep-blue">Methodology <span class="text-slate-grey">| CRISP-DM Framework</span></h1>
+  <div class="row mt-4">
+    <div class="col-lg-6">
+      <h3 class="section-title">Phases & Timeline</h3>
+      <div class="timeline-phase"><h5><i class="bi bi-database me-2 text-deep-blue"></i> 1. Business Understanding</h5><p>Define KPIs: demand accuracy & revenue uplift; stakeholder interviews with SACCOS.</p></div>
+      <div class="timeline-phase"><h5><i class="bi bi-bar-chart-steps me-2 text-deep-blue"></i> 2. Data Understanding</h5><p>GTFS historical schedules + weather/POI proxies; exploratory analysis of 135 routes.</p></div>
+      <div class="timeline-phase"><h5><i class="bi bi-brush me-2 text-deep-blue"></i> 3. Data Preparation</h5><p>Cleaning missing timestamps, merging weather patterns, POI density per stop.</p></div>
+      <div class="timeline-phase"><h5><i class="bi bi-graph-up me-2 text-deep-blue"></i> 4. Modeling</h5><p>Prophet, XGBoost, LightGBM, LSTM training; hyperparameter tuning.</p></div>
+      <div class="timeline-phase"><h5><i class="bi bi-check-circle me-2 text-deep-blue"></i> 5. Evaluation</h5><p>Champion ensemble (XGBoost+LSTM) based on RMSE & MAE.</p></div>
+      <div class="timeline-phase"><h5><i class="bi bi-cloud-upload me-2 text-deep-blue"></i> 6. Deployment</h5><p>Model serialization (pkl) & Streamlit prototype ready.</p></div>
+    </div>
+    <div class="col-lg-6">
+      <h3 class="section-title">Data Sources Table</h3>
+      <div class="table-responsive table-custom rounded-4 overflow-hidden shadow-sm">
+        <table class="table table-bordered mb-0">
+          <thead><tr><th>Source</th><th>Type</th><th>Key Features</th></tr></thead>
+          <tbody>
+            <tr><td>Digital Matatus GTFS</td><td>Transit schedules</td><td>Route shapes, stop times, frequencies</td></tr>
+            <tr><td>Open-Meteo API</td><td>Weather</td><td>Hourly temp, precipitation, wind speed</td></tr>
+            <tr><td>OSM POI</td><td>Spatial Points of Interest</td><td>Market density, land use, central business district proximity</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-title mt-5">Model Comparison: Strengths & Weaknesses</h3>
+  <div class="table-responsive table-custom rounded-4 shadow-sm mb-5">
+    <table class="table table-hover align-middle">
+      <thead><tr><th>Model</th><th>Strengths</th><th>Weaknesses</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-bold">Prophet</td><td>Handles seasonality & missing data; interpretable</td><td>Less adaptive to sudden shocks; lower accuracy with high-dim features</td></tr>
+        <tr><td class="fw-bold">XGBoost</td><td>High performance, handles non-linearity, feature importance</td><td>Requires careful tuning; not native time-series sequential memory</td></tr>
+        <tr><td class="fw-bold">LightGBM</td><td>Fast training, lower memory, leaf-wise growth</td><td>Can overfit small datasets, less robust to noise</td></tr>
+        <tr><td class="fw-bold">LSTM</td><td>Captures long-term temporal dependencies; sequential learning</td><td>Computationally heavy; needs large data; less interpretable</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="alert alert-light border-start border-4 border-deep-blue bg-white"><i class="bi bi-lightbulb"></i> <strong>Ensemble strategy:</strong> Weighted combination of XGBoost (demand peaks) + LSTM (temporal flow) yields <strong>best generalization</strong> across all 135 routes.</div>
+</main>
+<footer class="py-4 mt-5"><div class="container text-center"><small>© 2025 Okoth Joshua Jovern — CRISP-DM implementation for matatu demand forecasting</small></div></footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
