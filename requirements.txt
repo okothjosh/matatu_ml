@@ -1,1 +1,4 @@
-# Empty file - Streamlit Cloud will use default packages
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.17.0
