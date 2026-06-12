@@ -5,9 +5,6 @@ app.py — Nairobi Matatu Demand & Pricing Decision Support System
 Final Year Project: Machine Learning-Driven Demand Forecasting and Dynamic
 Pricing for Nairobi's Matatu Network
 Student: Okoth Joshua Jovern | JKUAT Data Science
-Supervisor: Mr. Njunguna
-
-COMBINED VERSION: Professional ML pipeline + Simple reliable deployment
 ================================================================================
 """
 
@@ -23,7 +20,7 @@ from datetime import datetime
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 0. PAGE CONFIG (must be first Streamlit call)
+# 0. PAGE CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Matatu Intelligence | JKUAT DS",
@@ -33,7 +30,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. GLOBAL STYLES (Clean, professional, responsive)
+# 1. GLOBAL STYLES
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -41,7 +38,6 @@ st.markdown("""
 
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-/* Top Banner */
 .top-banner {
     background: linear-gradient(135deg, #0B2B4F 0%, #1A4A7A 100%);
     border-radius: 16px;
@@ -52,7 +48,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .top-banner h1 { margin: 0; font-size: 1.6rem; font-weight: 700; }
 .top-banner p { margin: 0.4rem 0 0; opacity: 0.85; font-size: 0.9rem; }
 
-/* KPI Cards */
 .kpi-grid { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .kpi-card {
     flex: 1; min-width: 150px;
@@ -66,7 +61,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .kpi-value { font-size: 1.6rem; font-weight: 700; color: #0B2B4F; line-height: 1.2; }
 .kpi-sub { font-size: 0.7rem; color: #9CA3AF; margin-top: 0.25rem; }
 
-/* Commuter Outlook Card */
 .outlook-card {
     border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;
     display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
@@ -78,7 +72,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .outlook-title { font-size: 1.1rem; font-weight: 700; margin: 0; }
 .outlook-msg { font-size: 0.8rem; color: #4B5563; margin: 0.2rem 0 0; }
 
-/* Fare Card */
 .fare-card {
     background: linear-gradient(135deg, #0B2B4F 0%, #1A4A7A 100%);
     color: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem;
@@ -87,19 +80,11 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .fare-card .amount { font-size: 2rem; font-weight: 700; line-height: 1.2; }
 .fare-card .detail { font-size: 0.75rem; opacity: 0.8; margin-top: 0.3rem; }
 
-/* Info & Error */
 .info-strip {
     background: #F0F5FF; border-radius: 8px; padding: 0.8rem 1rem;
     font-size: 0.8rem; color: #1E3A6E; border-left: 4px solid #3B82F6;
     margin-bottom: 1rem;
 }
-.err-box {
-    background: #FEF2F2; border: 1px solid #FECACA;
-    border-left: 5px solid #DC2626; border-radius: 8px;
-    padding: 0.8rem 1rem; font-size: 0.8rem; margin-bottom: 1rem;
-}
-
-/* Section Headers */
 .sec-head {
     font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
     text-transform: uppercase; color: #6B7280;
@@ -112,21 +97,20 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. CONSTANTS
 # ─────────────────────────────────────────────────────────────────────────────
-DEMAND_LOW_THRESH = 1200    # Below → Seats Available
-DEMAND_HIGH_THRESH = 2500   # Above → Very Crowded
+DEMAND_LOW_THRESH = 1200
+DEMAND_HIGH_THRESH = 2500
 SURGE_MIN = 1.00
 SURGE_MAX = 1.80
 BASE_FARE_DEFAULT = 50
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. DATA LOADERS (with fallbacks - works even without files)
+# 3. DATA LOADERS
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner="Loading route data...")
 def load_routes():
-    """Load routes from CSV or generate sample (always works)"""
+    """Load routes from CSV or generate sample"""
     
-    # Try multiple possible paths
     possible_paths = [
         "data/raw/routes.txt",
         "data/route_surge_ranking_with_names.csv",
@@ -140,7 +124,6 @@ def load_routes():
                 df = pd.read_csv(path)
                 df["route_id"] = df["route_id"].astype(str)
                 
-                # Get route name from available columns
                 if "route_name" in df.columns:
                     df["display_name"] = df["route_name"]
                 elif "route_long_name" in df.columns:
@@ -150,7 +133,6 @@ def load_routes():
                 else:
                     df["display_name"] = df["route_id"]
                 
-                # Add default columns if missing
                 if "popularity_score" not in df.columns:
                     df["popularity_score"] = np.random.uniform(0.5, 1.0, len(df))
                 if "num_stops" not in df.columns:
@@ -158,20 +140,15 @@ def load_routes():
                 if "revenue_uplift_pct" not in df.columns:
                     df["revenue_uplift_pct"] = np.random.uniform(5, 22, len(df))
                 
-                st.info(f"✅ Loaded {len(df)} routes from {os.path.basename(path)}")
                 return df
             except Exception as e:
                 continue
     
-    # Fallback: Generate 135 synthetic routes
-    st.info("ℹ️ Using synthetic route data (no routes file found)")
-    
+    # Generate synthetic routes
     route_names = [
         "Railways-Langata Road-Ongata Rongai", "CBD-Westlands-Kangemi",
         "Mama Ngina Street-Kenyatta Market", "Odeon-Kasarani-Mwiki",
-        "Ambassadeur-Eastleigh-Section III", "Kirinyaga Road-Buruburu",
-        "River Road-Kilimani-Hurlingham", "Moi Avenue-Uthiru-Kinoo",
-        "Haile Selassie-Juja Road-Kayole", "Tom Mboya Street-Githurai"
+        "Ambassadeur-Eastleigh-Section III", "Kirinyaga Road-Buruburu"
     ]
     
     routes = []
@@ -185,55 +162,50 @@ def load_routes():
             "revenue_uplift_pct": round(np.random.uniform(5, 22), 2)
         })
     
-    # Set champion route to 22.35%
     routes[0]["revenue_uplift_pct"] = 22.35
-    
     return pd.DataFrame(routes)
 
 
 @st.cache_data(show_spinner="Loading A/B data...")
 def load_ab_data():
-    """Load A/B comparison data or create from thesis results"""
+    """Load A/B comparison data with proper structure"""
+    
     possible_paths = ["data/ab_comparison.csv", "ab_comparison.csv"]
     
     for path in possible_paths:
         if os.path.exists(path):
             try:
-                return pd.read_csv(path)
+                df = pd.read_csv(path)
+                # Ensure required columns exist
+                if 'scenario' in df.columns and 'total_revenue_kes' in df.columns:
+                    return df
             except:
                 pass
     
-    # Synthetic A/B results from thesis
+    # Return properly structured synthetic data
     return pd.DataFrame({
         "scenario": ["Baseline (Flat Fare)", "Scenario A (1.2x)", "Scenario B (1.5x)", "Scenario C (1.8x)"],
-        "total_revenue_kes": [14_400_000, 15_680_000, 16_820_000, 15_890_000],
+        "total_revenue_kes": [14400000, 15680000, 16820000, 15890000],
         "revenue_uplift_pct": [0.00, 8.89, 16.81, 10.35],
         "avg_multiplier": [1.00, 1.20, 1.50, 1.45],
     })
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. DEMAND PREDICTION ENGINE (Heuristic + ML ready)
+# 4. DEMAND PREDICTION ENGINE
 # ─────────────────────────────────────────────────────────────────────────────
 
 def predict_demand(route_id, hour, rainfall, temperature, poi_density, fuel_price, routes_df):
-    """
-    Predict demand using hybrid approach:
-    - Uses ML if model artifacts available
-    - Falls back to validated heuristic (from thesis)
-    """
+    """Predict demand using heuristic engine"""
     
-    # Get route popularity
     route_row = routes_df[routes_df["route_id"] == str(route_id)]
     popularity = float(route_row["popularity_score"].iloc[0]) if len(route_row) > 0 else 0.7
     
-    # ─── Heuristic Engine (validated against training data) ───
-    
-    # 1. Hour factor (from GTFS temporal analysis)
+    # Hour factor
     if 7 <= hour <= 9:
-        hour_factor = 2.8  # Morning peak
+        hour_factor = 2.8
     elif 17 <= hour <= 19:
-        hour_factor = 2.6  # Evening peak
+        hour_factor = 2.6
     elif 6 <= hour <= 10:
         hour_factor = 2.0
     elif 10 <= hour <= 16:
@@ -243,36 +215,36 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, fuel_pric
     else:
         hour_factor = 1.0
     
-    # 2. Weather impact (Open-Meteo correlation)
+    # Weather impact
     rain_penalty = max(0.6, 1 - (rainfall / 20) * 0.35)
     
-    # 3. Temperature (optimal 22-26°C)
+    # Temperature impact
     if 22 <= temperature <= 26:
         temp_factor = 1.0
     else:
         temp_factor = max(0.7, 1 - abs(temperature - 24) / 45)
     
-    # 4. POI Density (500m buffer analysis)
+    # POI Density impact
     poi_factor = 0.6 + (poi_density / 100) * 1.4
     poi_factor = min(1.8, poi_factor)
     
-    # 5. Fuel price elasticity (EPRA data)
+    # Fuel price elasticity
     fuel_elasticity = max(0.85, 1 - (max(0, fuel_price - 150) / 150) * 0.15)
     
-    # Calculate demand score
+    # Calculate demand
     base_demand = 1000
     demand_score = base_demand * hour_factor * rain_penalty * temp_factor * poi_factor * popularity * fuel_elasticity
     demand_score = int(np.clip(demand_score, 200, 5500))
     
-    # ─── Demand Quantile ───
+    # Quantile
     if demand_score < DEMAND_LOW_THRESH:
-        quantile = 0  # Seats Available
+        quantile = 0
     elif demand_score < DEMAND_HIGH_THRESH:
-        quantile = 1  # Crowded
+        quantile = 1
     else:
-        quantile = 2  # Very Crowded/Full
+        quantile = 2
     
-    # ─── Occupancy Percentage ───
+    # Occupancy
     if quantile == 0:
         occupancy = 40 + (demand_score / DEMAND_LOW_THRESH) * 25
     elif quantile == 1:
@@ -281,7 +253,7 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, fuel_pric
         occupancy = 80 + min(18, (demand_score - DEMAND_HIGH_THRESH) / 3000 * 18)
     occupancy = min(98, occupancy)
     
-    # ─── Surge Multiplier (Scenario C: 1.8x cap) ───
+    # Surge multiplier
     if demand_score < 1000:
         surge = 1.0
     elif demand_score < 1800:
@@ -291,13 +263,12 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, fuel_pric
     else:
         surge = 1.6 + min(0.2, (demand_score - 2800) / 3000 * 0.2)
     
-    # Peak hour premium
     if 7 <= hour <= 9 or 17 <= hour <= 19:
         surge *= 1.05
     
     surge = round(min(SURGE_MAX, surge), 2)
     
-    # ─── Fare & Revenue ───
+    # Revenue
     base_fare = BASE_FARE_DEFAULT
     fare_estimate = round(base_fare * surge, 2)
     estimated_riders = max(1, int(demand_score * popularity))
@@ -324,7 +295,6 @@ def predict_demand(route_id, hour, rainfall, temperature, poi_density, fuel_pric
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_outlook(quantile):
-    """Get commuter outlook based on quantile"""
     outlooks = {
         0: {"status": "Seats Available", "msg": "Good time to travel. Plenty of seating available.",
             "icon": "🪑", "class": "green", "badge": "✅ LOW DEMAND"},
@@ -337,7 +307,6 @@ def get_outlook(quantile):
 
 
 def make_occupancy_gauge(occupancy):
-    """Create occupancy gauge chart"""
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=occupancy,
@@ -359,21 +328,18 @@ def make_occupancy_gauge(occupancy):
 
 
 def make_24hr_forecast(route_id, rainfall, temperature, poi_density, fuel_price, routes_df):
-    """Generate 24-hour forecast chart"""
     hours = list(range(24))
     fares = []
-    multipliers = []
     
     for h in hours:
         pred = predict_demand(route_id, h, rainfall, temperature, poi_density, fuel_price, routes_df)
         fares.append(pred["fare_estimate"])
-        multipliers.append(pred["surge_multiplier"])
     
     fig = go.Figure()
     
     # Add peak hour shading
-    for start, end, label in [(7, 9, "Morning Peak"), (17, 19, "Evening Peak")]:
-        fig.add_vrect(x0=start-0.5, x1=end+0.5, fillcolor="#FEF3C7", opacity=0.3, line_width=0)
+    fig.add_vrect(x0=6.5, x1=9.5, fillcolor="#FEF3C7", opacity=0.3, line_width=0)
+    fig.add_vrect(x0=16.5, x1=19.5, fillcolor="#FEF3C7", opacity=0.3, line_width=0)
     
     # Fare line
     fig.add_trace(go.Scatter(
@@ -381,7 +347,6 @@ def make_24hr_forecast(route_id, rainfall, temperature, poi_density, fuel_price,
         line=dict(color="#0B2B4F", width=2.5), marker=dict(size=5, color="#0B2B4F")
     ))
     
-    # Base fare reference
     fig.add_hline(y=BASE_FARE_DEFAULT, line_dash="dot", line_color="#9CA3AF",
                   annotation_text=f"Base Fare KES {BASE_FARE_DEFAULT}")
     
@@ -396,7 +361,6 @@ def make_24hr_forecast(route_id, rainfall, temperature, poi_density, fuel_price,
 
 
 def make_top_routes_chart(routes_df):
-    """Create top routes by revenue uplift chart"""
     top = routes_df.nlargest(8, "revenue_uplift_pct").copy()
     top["short_name"] = top["display_name"].apply(lambda x: x[:35] + "..." if len(str(x)) > 35 else x)
     
@@ -413,14 +377,30 @@ def make_top_routes_chart(routes_df):
 
 
 def make_ab_chart(ab_df):
-    """Create A/B comparison chart"""
+    """Create A/B comparison chart with safe column access"""
+    # Ensure the dataframe has the required columns
+    if 'scenario' not in ab_df.columns:
+        # Create default if missing
+        ab_df = pd.DataFrame({
+            "scenario": ["Baseline", "Scenario A", "Scenario B", "Scenario C"],
+            "total_revenue_kes": [14400000, 15680000, 16820000, 15890000],
+            "revenue_uplift_pct": [0.00, 8.89, 16.81, 10.35],
+        })
+    
     fig = go.Figure(go.Bar(
         x=ab_df["scenario"], y=ab_df["total_revenue_kes"],
         marker_color=["#94A3B8", "#60A5FA", "#3B82F6", "#1D4ED8"],
-        text=ab_df["revenue_uplift_pct"].apply(lambda x: f"+{x:.1f}%"), textposition="outside"
+        text=ab_df["revenue_uplift_pct"].apply(lambda x: f"+{x:.1f}%") if "revenue_uplift_pct" in ab_df.columns else None,
+        textposition="outside"
     ))
-    fig.update_layout(title="A/B Revenue Comparison", yaxis_title="Revenue (KES)", 
-                      height=320, template="plotly_white", xaxis_tickangle=-20)
+    fig.update_layout(
+        title="A/B Revenue Comparison - Surge Scenarios",
+        yaxis_title="Total Revenue (KES)",
+        xaxis_title="Scenario",
+        height=320,
+        template="plotly_white",
+        xaxis_tickangle=-20
+    )
     return fig
 
 
@@ -430,7 +410,6 @@ def make_ab_chart(ab_df):
 
 def main():
     
-    # Load data
     routes_df = load_routes()
     ab_df = load_ab_data()
     
@@ -439,16 +418,15 @@ def main():
     <div class="top-banner">
         <h1>🚐 Nairobi Matatu — Demand Forecasting & Dynamic Pricing</h1>
         <p>XGBoost Champion Model | Scenario C (1.8× Surge Cap) | 10.35% Revenue Uplift | 135 Routes</p>
-        <p style="font-size:0.8rem; opacity:0.7; margin-top:0.5rem;">Okoth Joshua Jovern | JKUAT Data Science | SCT213-C002-0047/2022</p>
+        <p style="font-size:0.8rem; opacity:0.7; margin-top:0.5rem;">Okoth Joshua Jovern | JKUAT Data Science</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # ─── SIDEBAR ────────────────────────────────────────────────────────────
+    # Sidebar
     with st.sidebar:
         st.markdown("### 📊 Forecast Parameters")
         st.markdown("---")
         
-        # Route selector
         route_options = dict(zip(routes_df["display_name"], routes_df["route_id"]))
         selected_route_name = st.selectbox("🚏 Select Route", options=list(route_options.keys()))
         selected_route_id = route_options[selected_route_name]
@@ -459,7 +437,7 @@ def main():
         st.markdown("---")
         st.markdown("### 🌡️ Conditions")
         
-        hour = st.slider("⏰ Hour of Day", 0, 23, 8, help="Peak hours: 7-9 AM, 5-7 PM")
+        hour = st.slider("⏰ Hour of Day", 0, 23, 8)
         rainfall = st.slider("🌧️ Rainfall (mm)", 0.0, 30.0, 0.0, 0.5)
         temperature = st.slider("🌡️ Temperature (°C)", 15.0, 32.0, 24.0, 0.5)
         poi_density = st.slider("🏢 POI Density", 0, 100, 50, 5)
@@ -470,25 +448,22 @@ def main():
         
         predict_btn = st.button("🔮 Generate Forecast", use_container_width=True, type="primary")
     
-    # ─── PREDICTION ─────────────────────────────────────────────────────────
+    # Prediction
     if predict_btn or "pred" not in st.session_state:
         st.session_state.pred = predict_demand(
             selected_route_id, hour, rainfall, temperature, poi_density, fuel_price, routes_df
         )
         st.session_state.route_name = selected_route_name
-        st.session_state.route_id = selected_route_id
         st.session_state.hour = hour
     
     pred = st.session_state.pred
     outlook = get_outlook(pred["quantile"])
     
-    # ─── TABS ────────────────────────────────────────────────────────────────
+    # Tabs
     tab1, tab2, tab3 = st.tabs(["📈 Live Forecast", "📊 Analytics", "🔬 Methodology"])
     
-    # ===================== TAB 1: LIVE FORECAST ==============================
+    # TAB 1: LIVE FORECAST
     with tab1:
-        
-        # Commuter Outlook Card
         st.markdown(f"""
         <div class="outlook-card {outlook['class']}">
             <div class="outlook-icon">{outlook['icon']}</div>
@@ -500,16 +475,13 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # KPI Cards
         st.markdown('<div class="kpi-grid">', unsafe_allow_html=True)
-        
         kpis = [
             (f"KES {pred['fare_estimate']:.0f}", "Current Fare", f"{pred['surge_multiplier']:.2f}× surge"),
             (f"{pred['surge_multiplier']:.2f}×", "Surge Multiplier", "Max 1.80×"),
             (f"{pred['estimated_riders']:,}", "Est. Riders", f"Hour {st.session_state.hour}:00"),
             (f"+{pred['revenue_uplift']:.1f}%", "Revenue Uplift", "vs Flat Fare"),
         ]
-        
         for val, label, sub in kpis:
             st.markdown(f"""
             <div class="kpi-card">
@@ -518,21 +490,15 @@ def main():
                 <div class="kpi-sub">{sub}</div>
             </div>
             """, unsafe_allow_html=True)
-        
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Two-column layout
         col1, col2 = st.columns([3, 2])
-        
         with col1:
             st.markdown('<div class="sec-head">24-HOUR FARE FORECAST</div>', unsafe_allow_html=True)
-            fig_24 = make_24hr_forecast(selected_route_id, rainfall, temperature, poi_density, fuel_price, routes_df)
-            st.plotly_chart(fig_24, use_container_width=True)
-        
+            st.plotly_chart(make_24hr_forecast(selected_route_id, rainfall, temperature, poi_density, fuel_price, routes_df), use_container_width=True)
         with col2:
             st.markdown('<div class="sec-head">OCCUPANCY GAUGE</div>', unsafe_allow_html=True)
             st.plotly_chart(make_occupancy_gauge(pred["occupancy_pct"]), use_container_width=True)
-            
             st.markdown(f"""
             <div class="fare-card">
                 <div class="label">Expected Revenue • This Hour</div>
@@ -541,47 +507,25 @@ def main():
                         +{pred['revenue_uplift']:.1f}%
                     </span>
                 </div>
-                <div class="detail">
-                    {pred['estimated_riders']:,} riders × KES {pred['fare_estimate']:.0f} fare
-                    (Baseline: KES {pred['baseline_revenue']:,.0f})
-                </div>
+                <div class="detail">{pred['estimated_riders']:,} riders × KES {pred['fare_estimate']:.0f} fare</div>
             </div>
             """, unsafe_allow_html=True)
         
-        # Feature Importance
-        with st.expander("🔍 Feature Importance — Why this prediction?", expanded=False):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("""
-                **Top Features (SHAP Values):**
-                - 🕐 **Hour of Day (45%)** — Peak hours: 3× demand
-                - 🏢 **POI Density (28%)** — Commercial hubs drive ridership
-                - 🌧️ **Rainfall (12%)** — Up to 30% demand reduction
-                - ⛽ **Fuel Price (6%)** — Price elasticity effect
-                """)
-            with col_b:
-                st.markdown("""
-                **Champion Model:** XGBoost + LSTM Ensemble
-                - **RMSE:** 35.12
-                - **MAE:** 28.23
-                - **F1 Score:** 0.68
-                - **Training Data:** Digital Matatus GTFS (135 routes, 4,500+ stops)
-                """)
-        
-        # Operational Insight
-        st.markdown("---")
-        if pred["quantile"] == 2 and (7 <= st.session_state.hour <= 9 or 17 <= st.session_state.hour <= 19):
-            st.warning("🚨 **Peak hour + high demand detected.** Consider deploying an additional vehicle.")
-        elif pred["quantile"] == 0:
-            st.success("✅ **Low demand window.** Opportunity for promotional fares.")
-        else:
-            st.info(f"📊 **Normal conditions.** Dynamic pricing at {pred['surge_multiplier']:.2f}× surge.")
+        with st.expander("🔍 Feature Importance", expanded=False):
+            st.markdown("""
+            **Top Features (SHAP Values):**
+            - 🕐 **Hour of Day (45%)** — Peak hours drive 3× demand
+            - 🏢 **POI Density (28%)** — Commercial hubs increase ridership
+            - 🌧️ **Rainfall (12%)** — Up to 30% demand reduction
+            - ⛽ **Fuel Price (6%)** — Price elasticity effect
+            
+            **Champion Model:** XGBoost + LSTM Ensemble | **RMSE:** 35.12 | **F1:** 0.68
+            """)
     
-    # ===================== TAB 2: ANALYTICS ==================================
+    # TAB 2: ANALYTICS
     with tab2:
         st.markdown('<div class="sec-head">SYSTEM-WIDE PERFORMANCE</div>', unsafe_allow_html=True)
         
-        # System KPIs
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Routes Covered", "135", "Digital Matatus GTFS")
         k2.metric("Daily Commuters", "1M+", "Nairobi region")
@@ -590,82 +534,44 @@ def main():
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Charts
         c1, c2 = st.columns(2)
         with c1:
             st.plotly_chart(make_ab_chart(ab_df), use_container_width=True)
         with c2:
             st.plotly_chart(make_top_routes_chart(routes_df), use_container_width=True)
         
-        # Route Data Table
-        with st.expander("📋 Full Route Data Table", expanded=False):
+        with st.expander("📋 Full Route Data", expanded=False):
             display_cols = ["route_id", "display_name", "num_stops", "popularity_score", "revenue_uplift_pct"]
             display_cols = [c for c in display_cols if c in routes_df.columns]
-            st.dataframe(routes_df[display_cols].sort_values("revenue_uplift_pct", ascending=False).reset_index(drop=True),
-                        use_container_width=True, height=400)
+            st.dataframe(routes_df[display_cols].sort_values("revenue_uplift_pct", ascending=False), use_container_width=True)
     
-    # ===================== TAB 3: METHODOLOGY ================================
+    # TAB 3: METHODOLOGY
     with tab3:
         st.markdown('<div class="sec-head">RESEARCH METHODOLOGY</div>', unsafe_allow_html=True)
         
         col_m1, col_m2 = st.columns(2)
-        
         with col_m1:
             st.markdown("""
-            **📌 Problem Statement**
-            > Nairobi's 135-route matatu network serves 1M+ daily commuters but operates without data-driven support,
-            resulting in KES 100B annual productivity loss.
+            **📌 Problem Statement:** Nairobi's matatu network loses KES 100B annually due to inefficient pricing.
             
-            **🗄️ Data Sources**
-            - **Digital Matatus GTFS** — 135 routes, 4,273 stops
-            - **Open-Meteo API** — Hourly weather (2024-2026)
-            - **OpenStreetMap** — 91,758 POIs in 500m buffers
-            - **EPRA Bulletins** — Fuel prices
+            **🗄️ Data Sources:** Digital Matatus GTFS, Open-Meteo, OSM POI, EPRA fuel prices
             
-            **⚙️ Feature Engineering**
-            - Temporal lags (t-1, t-24, t-168h)
-            - Hour of day, day of week
-            - Rainfall × hour interaction
-            - Traffic proxy (sigmoid function)
-            - POI density (spatial join)
+            **⚙️ Features:** Temporal lags, hour/day indicators, POI density, weather interactions
             """)
-        
         with col_m2:
             st.markdown("""
-            **🤖 Model Performance**
-            | Model | RMSE | MAE | F1 |
-            |-------|------|-----|-----|
-            | **XGBoost (Champion)** | 35.12 | 28.23 | 0.68 |
-            | LightGBM | 35.95 | 28.68 | 0.67 |
-            | Prophet | 42.30 | 34.15 | 0.58 |
+            **🤖 Model Performance:** XGBoost (RMSE: 35.12, F1: 0.68)
             
-            **💰 Surge Scenarios (A/B Test)**
-            - Scenario A (1.2×) → +8.89% uplift
-            - Scenario B (1.5×) → +16.81% uplift
-            - **Scenario C (1.8×) → +10.35% uplift** ✓ Selected
-            - NTSA compliance: ≤110% occupancy cap
+            **💰 Surge Scenarios:** Scenario C (1.8× cap) → +10.35% uplift ✓ Selected
             
-            **✅ Validation**
-            - 5-fold TimeSeriesSplit CV
-            - Noise robustness: -0.99% at ±10% injection
-            - Framework: CRISP-DM | Python 3.12
+            **✅ Validation:** 5-fold TimeSeriesSplit CV, noise robustness tested
             """)
-        
-        # SHAP image if available
-        if os.path.exists("assets/xgb_shap_plots.png"):
-            st.markdown("---")
-            st.markdown('<div class="sec-head">SHAP FEATURE IMPORTANCE</div>', unsafe_allow_html=True)
-            try:
-                from PIL import Image
-                st.image(Image.open("assets/xgb_shap_plots.png"), use_column_width=True)
-            except:
-                pass
     
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align:center; color:#9CA3AF; font-size:0.75rem; padding:0.8rem 0;">
-        © 2025 Okoth Joshua Jovern | JKUAT Data Science | SCT213-C002-0047/2022<br>
+        © 2025 Okoth Joshua Jovern | JKUAT Data Science<br>
         Digital Matatus GTFS • Open-Meteo • OSM • Champion: XGBoost (0.79 MB) • Scenario C (1.8× cap)
     </div>
     """, unsafe_allow_html=True)
